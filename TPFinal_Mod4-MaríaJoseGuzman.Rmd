@@ -1,0 +1,224 @@
+---
+title: "TPFinal_Mod4"
+author: "María José Guzmán"
+date: "2024-01-10"
+output:
+  html_document:
+    theme: journal
+    number_sections: no
+    toc: yes
+    toc_def: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: no
+    code_download: yes
+    code_fold: hide
+    df_print: paged
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+# Cargar paquetes
+
+```{r}
+library(gmodels)
+library(ResourceSelection)
+library(ROCR)
+library(Epi)
+library(QuantPsyc)
+library(ggplot2)
+library(memisc)
+```
+
+# Cargar base
+
+```{r message=FALSE, warning=FALSE}
+base = read.csv("C:\\Users\\maria\\Dropbox\\Acádemico\\Análisis de datos\\Módulo 4\\Bases\\germancredit.csv")
+attach(base)
+```
+
+
+*Selecciono únicamente las variables necesarias*
+
+```{r}
+names(base)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+data = base[c("Default","duration","amount","installment","age","cards")]
+attach(data)
+
+```
+
+
+```{r}
+logit = glm(Default~.,
+           family = binomial(logit),
+           data = data)
+
+probit = glm(Default~.,
+           family = binomial(probit),
+           data = data)
+
+memisc::mtable(logit,probit,digits = 6,sdigits = 3)
+```
+
+*Revisión de la bondad de ajuste*
+
+```{r}
+hl1 = hoslem.test(data$Default,fitted(logit),g=10)
+hl2 = hoslem.test(data$Default,fitted(probit),g=10)
+hl1
+hl2
+```
+Ho = Bondad de ajuste
+h1 = No bondad de ajuste
+
+No se rechaza Ho, por lo tanto hay bondad de ajuste en ninguno de los dos modelos ni el probit ni el logit. A pesar de que el modelo probit tiene un p-value ligeramente mayor que el modelo logit.
+
+*Matriz de clasificación / Matriz de confusión*
+
+
+```{r}
+threshold = mean(fitted(logit))
+thresholdp = mean(fitted(probit))
+threshold
+thresholdp
+
+```
+El valor medio de ambos modelos es muy parecido, si en dado caso decidimos redondear se obtiene que el valor medio es de 0.3 para cada uno de los modelos.
+
+
+```{r}
+ClassLog(logit,data$Default,cut=threshold)
+
+ClassLog(probit,data$Default,cut=thresholdp)
+
+```
+Observando los resultados anteriores, vemos que el modelo no es muy bueno debido a que predice alrededor del 60%, si observamos los modelos el logit tiende a predecir mejor ligeramente sobre el modelo probit.
+
+*Curva ROC*
+
+**Modelo logit**
+
+```{r}
+pred = prediction(logit$fitted.values,data$Default)
+perf = performance(pred,measure = "tpr", x.measure = "fpr")
+plot(perf,colorize = T, lty = 3)
+abline(0,1,col="black")
+
+```
+
+
+```{r}
+pred2 = prediction(probit$fitted.values,data$Default)
+perf2 = performance(pred2,measure = "tpr", x.measure = "fpr")
+plot(perf,colorize = T, lty = 3)
+abline(0,1,col="black")
+```
+Se puede observar que ambas curvas estan achatadas por lo que vamos a observar sus AUC para definir que modelo es ligeramente mejor.
+
+
+*Área bajo la curva y punto óptimo*
+
+```{r}
+auclog = performance(pred,measure = "auc")
+aucl <- auclog@y.values[[1]]
+aucl
+aucpro = performance(pred2,measure = "auc")
+aucp <- aucpro@y.values[[1]]
+aucp
+```
+
+**Logit**
+
+```{r}
+ROC(form = Default~ duration+amount+installment+age+cards, plot = "ROC")
+```
+
+```{r}
+ROC(form = Default~ duration+amount+installment+age+cards, plot = "sp")
+```
+
+
+
+**Probit**
+
+
+```{r}
+perf1 <- performance(pred2,"sens","spec")
+
+sen <- slot(perf1,"y.values")[[1]]
+esp <- slot(perf1,"x.values")[[1]]
+alf <- slot(perf1,"alpha.values")[[1]]
+
+mat <- data.frame(alf,sen,esp)
+```
+
+```{r}
+m <- melt(mat,id=c("alf"))
+```
+
+```{r}
+p1 <- ggplot(m,aes(alf,value,group=variable,
+                   colour=variable))+
+  geom_line(size=1.2)+
+  labs(title="punto de corte para probit")
+
+p1
+
+```
+
+```{r}
+ggplotly(p1)
+```
+
+
+
+*Nuevo Umbral*
+
+Se utiliza un nuevo umbral de 0.50 y se observa que la matriz de clasificación con el nuevo umbral da valores mucho mejores donde se predice correctamente los 0 con un 95% para el modelo logit y probit.
+
+```{r}
+ClassLog(logit,data$Default,cut=0.50)
+
+ClassLog(probit,data$Default,cut=0.50)
+```
+*Proyección con valores hipoteticos*
+
+```{r}
+names(data)
+```
+```{r}
+mean(data$duration)
+mean(data$amount)
+mean(data$installment)
+mean(data$age)
+mean(data$cards)
+```
+
+
+```{r}
+newdata <- data.frame(duration=23,
+                      amount=3400,
+                      installment=2,
+                      age= 30,
+                      cards=2)
+
+predict(logit,newdata,type = "response")
+predict(probit,newdata,type = "response")
+```
+
+El mejor modelo para las predicciones es el modelo logit, debido a que su ROC es ligeramente mejor que el modelo probit al igual que si analizamos sensibilidad y especifidad.
+
+
+
+
+
+
+
+
+
